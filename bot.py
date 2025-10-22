@@ -27,7 +27,7 @@ API_URL_TEMPLATE = "https://295.vercel.app/like?uid={uid}&server_name={region}" 
 
 # Your personal configuration
 ADMIN_IDS = [6941014837] # Your Telegram User ID
-ALLOWED_GROUPS = [1003161051720] # Your Group ID
+ALLOWED_GROUPS = [-1003161051720] # Your Group ID
 vip_users = [6941014837] # VIP User IDs
 DEFAULT_DAILY_LIMIT = 30 # Default like limit for groups
 
