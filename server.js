@@ -8,16 +8,12 @@ import { fileURLToPath } from 'url';
 // =========================================================
 // 1. CONFIGURATION
 // =========================================================
-// Look for variables in the environment, otherwise use local defaults
-const BOT_TOKEN = process.env.BOT_TOKEN; 
-const MONGO_URI = process.env.MONGO_URI;
-// Render provides the URL automatically, or we set it manually
-const WEBAPP_URL = process.env.WEBAPP_URL; 
+// These use values from Render's "Environment Variables"
+// If testing locally, you can replace the process.env part with your strings.
+const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE'; 
+const MONGO_URI = process.env.MONGO_URI || 'YOUR_MONGO_URI_HERE';
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-app-name.onrender.com'; 
 const PORT = process.env.PORT || 3000;
-
-if (!BOT_TOKEN || !MONGO_URI) {
-    console.error("❌ ERROR: Missing BOT_TOKEN or MONGO_URI in Environment Variables.");
-}
 
 // =========================================================
 // 2. SERVER SETUP
@@ -26,12 +22,11 @@ const app = express();
 const bot = new Telegraf(BOT_TOKEN);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public')); // Serves your index.html
+app.use(express.static('public'));
 
-// Database Connection
+// Connect to MongoDB
 mongoose.connect(MONGO_URI)
     .then(() => console.log('✅ MongoDB Connected Successfully'))
     .catch(err => console.error('❌ MongoDB Connection Error:', err));
@@ -42,7 +37,7 @@ mongoose.connect(MONGO_URI)
 const UserSchema = new mongoose.Schema({
     tgId: { type: String, required: true, unique: true },
     username: String,
-    coins: { type: Number, default: 50 }, // Starting Balance
+    coins: { type: Number, default: 50 }, 
     region: { type: String, default: 'ETHIOPIA' },
     savedUid: String,
     joinedAt: { type: Date, default: Date.now },
@@ -60,59 +55,37 @@ const User = mongoose.model('User', UserSchema);
 // 4. SIMULATION ENGINES
 // =========================================================
 
-/**
- * Simulates sending data to Garena servers.
- * Since there is no public API, this simulates latency and responses.
- */
+// Simulate Action (Like, Visit, etc.)
 async function simulateFFAction(uid, action) {
     return new Promise((resolve, reject) => {
-        // Basic Validation
-        if (!/^\d{8,12}$/.test(uid)) {
-            return reject("Invalid UID Format. Must be 8-12 digits.");
-        }
-
-        // Simulate Network Latency (1.5s to 3s)
+        if (!/^\d{8,12}$/.test(uid)) return reject("Invalid UID Format");
+        
+        // 1.5 - 3 second delay to look real
         const delay = Math.floor(Math.random() * 1500) + 1500;
 
         setTimeout(() => {
-            // 95% Success Rate simulation
-            const isSuccess = Math.random() > 0.05;
-            
-            if (isSuccess) {
-                resolve({ 
-                    success: true, 
-                    message: `Successfully sent ${action} to UID: ${uid}` 
-                });
-            } else {
-                reject("Server Timeout: Target player offline or server busy.");
-            }
+            resolve({ 
+                success: true, 
+                message: `${action} sent successfully to UID: ${uid}` 
+            });
         }, delay);
     });
 }
 
-/**
- * Simulates fetching profile data.
- * Returns consistent mock data based on UID to look real.
- */
+// Simulate Profile Fetch (Consistent Fake Data)
 async function simulateProfileFetch(uid, region) {
     return new Promise((resolve) => {
         setTimeout(() => {
-            // Generate deterministic but random-looking data based on UID
             const lastThree = uid.substring(uid.length - 3);
-            const levels = Math.floor(parseInt(lastThree) / 10) + 40; // Level 40-100ish
+            const levels = Math.floor(parseInt(lastThree || "50") / 10) + 40;
             
-            const ranks = ['Platinum III', 'Diamond IV', 'Heroic', 'Grandmaster'];
-            const rankIndex = parseInt(uid) % ranks.length;
-            
-            const likes = parseInt(uid.substring(0, 4)) + Math.floor(Math.random() * 1000);
-
             resolve({
-                nickname: `Killer_ET${lastThree}`, // Ethiopia style name
+                nickname: `Killer_ET${lastThree}`,
                 uid: uid,
                 region: region,
                 level: levels > 100 ? 99 : levels,
-                rank: ranks[rankIndex],
-                likes: likes,
+                rank: 'Heroic',
+                likes: 1200 + Math.floor(Math.random() * 500),
                 bio: "Respect for all! 🇪🇹🔥",
                 avatar: "https://cdn-icons-png.flaticon.com/512/147/147142.png" 
             });
@@ -124,18 +97,12 @@ async function simulateProfileFetch(uid, region) {
 // 5. API ROUTES
 // =========================================================
 
-// GET: Fetch User Data (Auto-create if not exists)
+// Get User Info
 app.get('/api/user/:id', async (req, res) => {
     try {
         let user = await User.findOne({ tgId: req.params.id });
-        
         if (!user) {
-            // Create new user if they don't exist
-            user = await User.create({ 
-                tgId: req.params.id, 
-                username: 'New User' 
-            });
-            console.log(`New user registered: ${req.params.id}`);
+            user = await User.create({ tgId: req.params.id, username: 'New User' });
         }
         res.json(user);
     } catch (e) {
@@ -144,98 +111,92 @@ app.get('/api/user/:id', async (req, res) => {
     }
 });
 
-// POST: Check Profile Info
+// Check Profile
 app.post('/api/check-profile', async (req, res) => {
     const { uid, region } = req.body;
-    
-    if(!uid) return res.json({ success: false, error: "UID Required" });
-
     try {
-        const profileData = await simulateProfileFetch(uid, region);
-        res.json({ success: true, data: profileData });
+        const data = await simulateProfileFetch(uid, region);
+        res.json({ success: true, data });
     } catch (e) {
         res.json({ success: false, error: "Failed to fetch profile" });
     }
 });
 
-// POST: Execute Action (Like, Request, etc.)
+// Execute Action
 app.post('/api/execute', async (req, res) => {
     const { tgId, uid, region, action } = req.body;
-    const COST = 5;
-
     try {
         const user = await User.findOne({ tgId });
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        // Check Balance
-        if (user.coins < COST) {
-            return res.json({ success: false, error: "Insufficient Coins! You need 5 coins." });
+        if (user.coins < 5) {
+            return res.json({ success: false, error: "Insufficient Coins" });
         }
 
-        // Execute Simulation
         const result = await simulateFFAction(uid, action);
 
-        // Deduct Coins & Save Data
-        user.coins -= COST;
+        user.coins -= 5;
         user.savedUid = uid;
         user.region = region;
-        
-        // Add to History
         user.history.unshift({
             action: action,
             targetUid: uid,
             status: 'Success'
         });
-
-        // Keep history size manageable (last 50 items)
+        
         if(user.history.length > 50) user.history.pop();
-
         await user.save();
 
-        res.json({ 
-            success: true, 
-            newCoins: user.coins, 
-            message: result.message 
-        });
-
+        res.json({ success: true, newCoins: user.coins, message: result.message });
     } catch (e) {
-        // Log failed attempt in DB (optional, but good for debugging)
         res.json({ success: false, error: e.toString() });
     }
 });
 
 // =========================================================
-// 6. TELEGRAM BOT LOGIC
+// 6. TELEGRAM BOT LOGIC (FIXED IMAGE)
 // =========================================================
 
-bot.command('start', (ctx) => {
-    ctx.replyWithPhoto(
-        'https://wallpapers.com/images/hd/free-fire-logo-on-black-background-8w194-2.jpg', // Placeholder image
-        {
-            caption: `<b>🔥 Welcome to FF Master Tools!</b>\n\nManage your Free Fire interactions seamlessly.\n\n👇 <b>Click below to open the app:</b>`,
+bot.command('start', async (ctx) => {
+    try {
+        // We use a Wikimedia URL which is safe and reliable
+        await ctx.replyWithPhoto(
+            'https://upload.wikimedia.org/wikipedia/commons/f/f4/Garena_Free_Fire_Logo.png', 
+            {
+                caption: `<b>🔥 Welcome to FF Master Tools!</b>\n\nManage your Free Fire interactions seamlessly.\n\n👇 <b>Click below to open the app:</b>`,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: "🚀 Open Tools App", web_app: { url: WEBAPP_URL } }
+                    ]]
+                }
+            }
+        );
+    } catch (error) {
+        // Fallback: If image fails, send text only so bot doesn't crash
+        console.log("Image failed, sending text fallback.");
+        await ctx.reply(`<b>🔥 Welcome to FF Master Tools!</b>\n\n👇 <b>Click below to open:</b>`, {
             parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [[
                     { text: "🚀 Open Tools App", web_app: { url: WEBAPP_URL } }
                 ]]
             }
-        }
-    );
+        });
+    }
 });
 
-// Start the bot
-bot.launch().then(() => {
-    console.log('🤖 Telegram Bot Started');
-});
-
-// Enable graceful stop
+// Graceful Stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 // =========================================================
-// 7. START EXPRESS SERVER
+// 7. START SERVER
 // =========================================================
+// Start Bot
+bot.launch().then(() => console.log('🤖 Telegram Bot Started'));
+
+// Start Express
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌍 WebApp URL configured as: ${WEBAPP_URL}`);
 });
