@@ -6,12 +6,18 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // =========================================================
-// 1. CONFIGURATION (EDIT THESE)
+// 1. CONFIGURATION
 // =========================================================
-const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN_HERE'; // Get from @BotFather
-const MONGO_URI = 'mongodb://localhost:27017/ff_tools'; // Or your MongoDB Atlas URL
-const WEBAPP_URL = 'https://your-domain.com'; // Your HTTPS URL where this is hosted
+// Look for variables in the environment, otherwise use local defaults
+const BOT_TOKEN = process.env.BOT_TOKEN; 
+const MONGO_URI = process.env.MONGO_URI;
+// Render provides the URL automatically, or we set it manually
+const WEBAPP_URL = process.env.WEBAPP_URL; 
 const PORT = process.env.PORT || 3000;
+
+if (!BOT_TOKEN || !MONGO_URI) {
+    console.error("❌ ERROR: Missing BOT_TOKEN or MONGO_URI in Environment Variables.");
+}
 
 // =========================================================
 // 2. SERVER SETUP
